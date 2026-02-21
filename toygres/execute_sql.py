@@ -4,6 +4,7 @@ from rich import box
 
 from . import db
 from .constants import PG_TYPES
+from .models import ColumnMeta, OutputData
 
 console = Console()
 
@@ -45,22 +46,38 @@ def _pretty_status(status: str) -> str | None:
             return status.lower()
 
 
-def run(sql):
+def run(sql) -> OutputData:
+    """Execute SQL and return a structured SqlOutputData model."""
     description, rows, status = db.executeSQL(sql)
 
-    # Always show the status message for every query
-    msg = _pretty_status(status)
+    col_meta = []
+    if description:
+        for col in description:
+            col_meta.append(ColumnMeta(name=col.name, type_code=col.type_code))
+
+    serialised_rows = [list(row) for row in rows] if rows else []
+
+    return OutputData(
+        type="sql",
+        description=col_meta,
+        rows=serialised_rows,
+        status=status or "",
+    )
+
+
+def parse_sql_output(data: OutputData) -> None:
+    """Render a SqlOutputData model to the terminal using Rich."""
+    msg = _pretty_status(data.status)
     if msg:
         console.print(f"[green]✓[/green] {msg}")
 
-    # Show tabular results if the query returned rows
-    if description:
+    if data.description:
         table = Table(box=box.ROUNDED, show_header=True, header_style="bold #ECE7D1")
-        for col in description:
+        for col in data.description:
             type_name = PG_TYPES.get(col.type_code, f"oid:{col.type_code}")
             table.add_column(f"{col.name}\n[dim]{type_name}[/dim]", overflow="fold")
 
-        for row in rows:
+        for row in data.rows:
             cells = []
             for val in row:
                 if val is None:
