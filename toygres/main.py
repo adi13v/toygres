@@ -1,3 +1,4 @@
+from toygres.models import AiMessage
 from . import db
 from . import execute_sql
 from . import execute_meta
@@ -6,33 +7,32 @@ from .ai import ChatSession
 from .art import print_logo, print_shortcuts
 from .constants import YELLOW, RESET
 from .autocomplete import HistoryCompleter
-from .utils import looks_like_sql
 from .models import OutputData
 from prompt_toolkit import PromptSession
-from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.history import FileHistory
 import questionary
 from rich.console import Console
 from rich.panel import Panel
-from rich.syntax import Syntax
 from .execute_sql import parse_sql_output
 from .execute_meta import parse_meta_output
+from .utils import clean_history
 
 
-class SQLOnlyHistory(FileHistory):
-    """FileHistory that only stores SQL entries and deduplicates them."""
+class SmartHistory(FileHistory):
+    """FileHistory that prunes old entries and deduplicates on save."""
+
+    def __init__(self, filename: str, days: int = 3) -> None:
+        clean_history(filename, days=days)
+        super().__init__(filename)
 
     def append_string(self, string: str) -> None:
-        # Reject non-SQL (menu, exit, psql meta-commands, etc.)
-        # if not looks_like_sql(string):
-        #     return
         # Reject duplicates already present in the in-memory list
         if string in self._loaded_strings:
             return
         super().append_string(string)
 
 
-history = SQLOnlyHistory(".toygres_history")
+history = SmartHistory(".toygres_history")
 
 
 def parse_ai_sql_and_output(data: OutputData) -> None:
@@ -72,12 +72,23 @@ def render_output(data: OutputData) -> None:
             parse_sql_output(data)
         case "meta":
             parse_meta_output(data)
-        case "ai-sql":
-            parse_ai_sql_and_output(data)
-        case "ai-meta":
-            parse_ai_meta_output(data)
         case "ai-text":
             parse_ai_text(data)
+
+
+def run_and_track(ai_session: ChatSession, runner, query: str) -> OutputData:
+    """Execute a query/command, logging it (and any error) into the AI session."""
+    print(f"query is {query}")
+    ai_session._add_message_to_history(
+        AiMessage(role="user", content=f"Ran the query: {query}")
+    )
+    try:
+        return runner(query)
+    except Exception as e:
+        ai_session._add_message_to_history(
+            AiMessage(role="assistant", content=f"Error raised {e}")
+        )
+        raise
 
 
 def main():
@@ -115,6 +126,9 @@ def main():
 
         try:
             host, user, port, dbname = db.connect_db(selected_db)
+            _, _, _, _ = db.connect_to_read_only_db(
+                selected_db
+            )  # Also create a seperate read only connection (Will be used by AI)
         except Exception as e:
             print(f"Failed to connect to database '{selected_db}': {e}")
             continue
@@ -137,41 +151,23 @@ def main():
 
         print_shortcuts()
 
-        bindings = KeyBindings()
-
-        @bindings.add("enter")
-        def smart_enter(event):
-            buf = event.current_buffer
-            text = buf.text.strip()
-            # Allow command without colon mostly for special commands
-            if text.rstrip().endswith(";") or text.strip().lower() in (
-                "menu",
-                "clear",
-                "exit",
-                "quit",
-                "reset db",
-                "atom bomb",
-            ):
-                buf.validate_and_handle()
-            else:
-                buf.insert_text("\n")
-
         session = PromptSession(
-            key_bindings=bindings,
             multiline=True,
             history=history,
             completer=HistoryCompleter(history),
-            # search_ignore_case=True, ## doesn't seem to work, done manually in autocomplete.py
         )
 
         # Inner loop for query prompting
         inner_break = False
+        next_default = ""
         while True:
             try:
-                query = session.prompt("> ")
+                query = session.prompt("> ", default=next_default)
+                next_default = ""
                 query = query.strip()
                 if not query:
                     continue
+
                 cmd_lower = query.lower().rstrip(";")
                 if cmd_lower == "menu":
                     print(f"\n{YELLOW}Returning to DB selection menu...{RESET}\n")
@@ -211,26 +207,28 @@ def main():
                     print(f"\n{YELLOW}Bye! ʕ·ᴥ·ʔ{RESET}\n")
                     return
                 elif query.startswith("\\"):
-                    output = execute_meta.run(query)
+                    output = run_and_track(
+                        ai_session, execute_meta.run, query.rstrip(";")
+                    )
                     render_output(output)
                 elif query.startswith("??"):
                     question = query[2:].strip().rstrip(";")
                     if question:
                         with console.status("Processing...", spinner="dots"):
                             ai_output = execute_ai.run(ai_session, question)
-                            if ai_output.type == "ai-sql":
-                                sql_output = execute_sql.run(ai_output.command)
-                                ai_output.rows = sql_output.rows
-                                ai_output.description = sql_output.description
-                                ai_output.status = sql_output.status
-                            elif ai_output.type == "ai-meta":
-                                meta_output = execute_meta.run(ai_output.command)
-                                ai_output.output = meta_output.output
-                            elif ai_output.type == "ai-text":
-                                pass  # AI text will be rendered as-is
-                        render_output(ai_output)
+                        if ai_output.type in ("ai-sql", "ai-meta"):
+                            console.print(
+                                f"[bold bright_green]AI suggests:[/bold bright_green] "
+                                f"[bright_green]{ai_output.command}[/bright_green]"
+                            )
+                            # Instead of
+                            next_default = ai_output.command
+                        else:
+                            render_output(ai_output)
                 else:
-                    output = execute_sql.run(query)
+                    output = run_and_track(
+                        ai_session, execute_sql.run, query.rstrip(";")
+                    )
                     render_output(output)
             except KeyboardInterrupt:
                 print(f"\n{YELLOW}Bye! ʕ·ᴥ·ʔ{RESET}\n")

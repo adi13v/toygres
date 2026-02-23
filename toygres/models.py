@@ -1,8 +1,5 @@
-from __future__ import annotations
-
-from typing import Literal
-
-from pydantic import BaseModel
+from typing import Optional, Literal
+from pydantic import BaseModel, ConfigDict
 
 
 class ColumnMeta(BaseModel):
@@ -35,5 +32,13 @@ class OutputData(BaseModel):
 class AiResponse(BaseModel):
     """Structured schema returned by the AI model."""
 
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["text", "sql", "meta"]
     content: str
+
+
+class AiMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+    id: Optional[int] = None

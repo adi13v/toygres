@@ -8,7 +8,7 @@ console = Console()
 
 def run(command) -> OutputData:
     """Execute a meta-command and return a structured OutputData model."""
-    output = db.executepsql(command)
+    output = db.execute_meta_command(command)
     return OutputData(type="meta", output=output or "")
 
 

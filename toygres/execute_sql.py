@@ -9,13 +9,17 @@ from .models import ColumnMeta, OutputData
 console = Console()
 
 
-def truncate(value, max_len=30):
-    """Middle-truncate a string to max_len characters."""
+def truncate(value, max_len: int | None = 45) -> tuple[str, bool]:
+    """Middle-truncate a string.
+
+    Returns (display_string, was_truncated).
+    Pass max_len=None to disable truncation (single-column queries).
+    """
     s = str(value)
-    if len(s) <= max_len:
-        return s
+    if max_len is None or len(s) <= max_len:
+        return s, False
     half = (max_len - 3) // 2
-    return s[:half] + "..." + s[-(max_len - 3 - half) :]
+    return s[:half] + "..." + s[-(max_len - 3 - half) :], True
 
 
 def _pretty_status(status: str) -> str | None:
@@ -46,6 +50,25 @@ def _pretty_status(status: str) -> str | None:
             return status.lower()
 
 
+def run_read_only(sql) -> OutputData:
+    """Execute SQL and return a structured SqlOutputData model."""
+    description, rows, status = db.executeSQL(sql)
+
+    col_meta = []
+    if description:
+        for col in description:
+            col_meta.append(ColumnMeta(name=col.name, type_code=col.type_code))
+
+    serialised_rows = [list(row) for row in rows] if rows else []
+
+    return OutputData(
+        type="sql",
+        description=col_meta,
+        rows=serialised_rows,
+        status=status or "",
+    )
+
+
 def run(sql) -> OutputData:
     """Execute SQL and return a structured SqlOutputData model."""
     description, rows, status = db.executeSQL(sql)
@@ -72,18 +95,32 @@ def parse_sql_output(data: OutputData) -> None:
         console.print(f"[green]✓[/green] {msg}")
 
     if data.description:
+        num_cols = len(data.description)
+        # If we have more than 2 columns, truncate the values to 45 characters max
+        # Otherwise, don't truncate
+        max_len = None if num_cols <= 2 else 45
+
         table = Table(box=box.ROUNDED, show_header=True, header_style="bold #ECE7D1")
         for col in data.description:
             type_name = PG_TYPES.get(col.type_code, f"oid:{col.type_code}")
             table.add_column(f"{col.name}\n[dim]{type_name}[/dim]", overflow="fold")
 
+        any_truncated = False
         for row in data.rows:
             cells = []
             for val in row:
                 if val is None:
                     cells.append("[bold red]NULL[/bold red]")
                 else:
-                    cells.append(truncate(val))
+                    display, was_truncated = truncate(val, max_len)
+                    if was_truncated:
+                        any_truncated = True
+                    cells.append(display)
             table.add_row(*cells)
 
         console.print(table)
+
+        if any_truncated:
+            console.print(
+                "[dim]Long values truncated — fetch less than 3 columns to see the full untruncated values.[/dim]"
+            )

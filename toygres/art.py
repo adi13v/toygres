@@ -1,4 +1,8 @@
-from .constants import NAVY, RESET, GRAY, YELLOW, DEEP_RED
+from .constants import NAVY, RESET
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
 
 LOGO = f"""
 {NAVY}  ████████╗ ██████╗ ██╗   ██╗ ██████╗ ██████╗ ███████╗███████╗{RESET}
@@ -15,20 +19,30 @@ def print_logo():
 
 
 def print_shortcuts():
-    print(f"\n  {GRAY}Available Commands:{RESET}")
-    print(
-        f"  {GRAY}• {RESET};{GRAY}                 - Execute standard SQL query{RESET}"
+    console = Console()
+    table = Table(
+        show_header=False,
+        box=box.SIMPLE,
+        padding=(0, 2),
+        show_edge=False,
     )
-    print(
-        f"  {GRAY}• {RESET}\\{GRAY}                 - Execute psql meta-commands{RESET}"
+    table.add_column("Command", style="bold cyan", no_wrap=True)
+    table.add_column("Description", style="dim white")
+
+    table.add_row("Esc + Enter", "Submit query / command")
+    table.add_row("?? <question>", "Ask AI a question")
+    table.add_row("\\<cmd>", "Execute psql meta-commands")
+    table.add_row("menu", "Return to database selection")
+    table.add_row(
+        "[yellow]reset db[/yellow]", "[yellow]Delete all rows from all tables[/yellow]"
     )
-    print(
-        f"  {GRAY}• {RESET}menu{GRAY}              - Return to Database selection{RESET}"
+    table.add_row(
+        "[red]atom bomb[/red]",
+        "[red]Drop all tables, indexes, functions — everything[/red]",
     )
-    print(
-        f"  {GRAY}• {YELLOW}reset db{GRAY}          - Delete all the entries from all the tables{RESET}"
+    table.add_row("exit / quit", "Quit application")
+    table.add_row("Ctrl+C", "Force quit")
+
+    console.print(
+        Panel(table, title="[bold blue]Available Commands[/bold blue]", expand=False)
     )
-    print(
-        f"  {GRAY}• {DEEP_RED}atom bomb{GRAY}         - Deletes all the tables, indexes, enums, functions, everything!{RESET}"
-    )
-    print(f"  {GRAY}• {RESET}Ctrl+C{GRAY}            - Quit application{RESET}\n")

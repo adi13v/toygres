@@ -3,6 +3,7 @@ from psycopg2 import sql
 import subprocess
 
 conn = None
+read_only_conn = None
 
 HOST = "localhost"
 USER = "postgres"
@@ -41,6 +42,19 @@ def connect_db(dbname):
     return HOST, USER, PORT, DBNAME
 
 
+# Connect as a user role called ai to grant only read permission, this is important for tool calling
+def connect_to_read_only_db(dbname):
+    global read_only_conn, DBNAME
+    if read_only_conn is not None:
+        try:
+            read_only_conn.close()
+        except Exception:
+            pass
+    DBNAME = dbname
+    read_only_conn = psycopg2.connect(host=HOST, user="ai", port=PORT, dbname=DBNAME)
+    return HOST, USER, PORT, DBNAME
+
+
 def executeSQL(sql):
     try:
         cur = conn.cursor()
@@ -57,6 +71,25 @@ def executeSQL(sql):
         return description, rows, status
     except Exception:
         conn.rollback()
+        raise
+
+
+def executeSQLReadOnly(sql):
+    try:
+        cur = read_only_conn.cursor()
+        cur.execute(sql)
+
+        description = cur.description
+        status = cur.statusmessage
+        try:
+            rows = cur.fetchall()
+        except Exception:
+            rows = []
+
+        read_only_conn.commit()
+        return description, rows, status
+    except Exception:
+        read_only_conn.rollback()
         raise
 
 
@@ -93,10 +126,24 @@ def atom_bomb():
         raise
 
 
-def executepsql(command):
+def execute_meta_command(command):
     command = command.rstrip().rstrip(";")
     result = subprocess.run(
         ["psql", "-U", USER, "-d", DBNAME, "-h", HOST, "-p", PORT, "-c", command],
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout.strip()
+    error = result.stderr.strip()
+    if error:
+        raise RuntimeError(error)
+    return output
+
+
+def execute_read_only_meta_command(command):
+    command = command.rstrip().rstrip(";")
+    result = subprocess.run(
+        ["psql", "-U", "ai", "-d", DBNAME, "-h", HOST, "-p", PORT, "-c", command],
         capture_output=True,
         text=True,
     )

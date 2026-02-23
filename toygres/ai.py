@@ -1,8 +1,10 @@
+from toygres.models import AiMessage
+from rapidfuzz.fuzz import ratio as fuzz_ratio
 from openai import OpenAI
+import json
 import os
 import dotenv
 
-from rapidfuzz.fuzz import partial_ratio_alignment
 
 from . import db
 from .models import AiResponse, OutputData
@@ -10,14 +12,115 @@ from .models import AiResponse, OutputData
 dotenv.load_dotenv()
 
 SYSTEM_PROMPT = """
-You are an Expert PostgreSQL Analyst with tools to execute sql or meta commands, or command to see the schema of a table. Use these tools or to resolve the user's question.
-Finally output either plain text that user can see or an SQL query that user can run. Whatever  is suitable for the user's question.
-The internal queries that you run via tools should return small data, since large data will be hard for you to analyse. The output SQL that you send to user can however return large data, since it is not going to be executed by you.
-The tables that currently exist in the database are: {tables}
-{schemas}"""
+## SYSTEM PROMPT
 
+You are an Expert PostgreSQL Analyst with tools to execute SQL or meta commands, and to inspect table schemas. Use these tools when necessary to resolve the user's question accurately.
+
+You have read-only execution capability. If a required query is not read-only, do not execute it yourself. Instead, output the SQL query for the user to run.
+
+---
+
+### Objective
+
+Provide the most appropriate and correct response to the user’s query using the available tools and database context.
+
+---
+
+### Tool Usage Policy
+
+- Prefer using tools when the answer depends on actual database state.
+- You may execute:
+  - read-only SQL queries
+  - meta/schema inspection commands
+- You must not execute any query that modifies data or schema.
+- If a non–read-only query is required, output it for the user instead.
+
+---
+
+### Output Rules
+
+- Output either:
+  - plain text for the user, or
+  - an SQL query the user can run.
+- Choose whichever best answers the user's question.
+- Do not include explanations outside the required output.
+
+---
+
+### For statements that are NOT read only
+If you want the user to execute a query, you must output it with type being ```sql``` or ```meta``` and content being the query
+"""
 # Score threshold for a table name to be considered "referenced" in the conversation
 _FUZZY_THRESHOLD = 70
+
+
+tools = [
+    {
+        "type": "function",
+        "name": "execute_read_only_sql",
+        "description": "Execute a read only SQL query. Should try to return focused and small data, output that will be easy for you to analyse.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sql": {
+                    "type": "string",
+                    "description": "An SQL query to execute.",
+                },
+            },
+            "required": ["sql"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "execute_meta_commands",
+        "description": "meta commands",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "A meta command to execute.",
+                },
+            },
+            "required": ["command"],
+        },
+    },
+]
+
+
+def _execute_read_only_sql(sql: str) -> str:
+    """Run a read-only SQL query and return the result as a plain string."""
+    try:
+        _, rows, status = db.executeSQLReadOnly(sql)
+        if rows:
+            return "\n".join(str(row) for row in rows)
+        return status or "(no rows returned)"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def _execute_meta_commands(command: str) -> str:
+    """Run a meta-command and return the output as a plain string."""
+    try:
+        result = db.execute_read_only_meta_command(command)
+        return str(result) if result else "(no output)"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+_TOOL_DISPATCH: dict[str, callable] = {
+    "execute_read_only_sql": lambda args: _execute_read_only_sql(args["sql"]),
+    "execute_meta_commands": lambda args: _execute_meta_commands(args["command"]),
+}
+
+
+def _dispatch_tool(name: str, arguments_json: str) -> str:
+    """Parse tool arguments and call the matching local function."""
+    args = json.loads(arguments_json)
+    handler = _TOOL_DISPATCH.get(name)
+    if handler is None:
+        return f"Unknown tool: {name}"
+    return handler(args)
 
 
 class ChatSession:
@@ -31,28 +134,59 @@ class ChatSession:
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         self.model = model
         self.history_length = history_length
-        self.messages = [{"role": "system", "content": system_prompt}]
+        self.messages = [AiMessage(role="system", content=system_prompt, id=0)]
 
     def ask(self, user_text: str) -> AiResponse:
-        """Send a message and return a structured AiResponse."""
-        # refresh the system prompt before every ask
-        self._trim_history_if_needed(self.messages, self.history_length)
+        """Send a message, run the tool-call loop, and return a structured AiResponse."""
+        self._add_message_to_history(AiMessage(role="user", content=user_text))
         self.refresh_system_prompt()
-        # Add the message to the history
-        self.messages.append({"role": "user", "content": user_text})
 
-        resp = self.client.beta.chat.completions.parse(
-            model=self.model,
-            messages=self.messages,
-            response_format=AiResponse,
+        input_messages: list = [
+            {"role": m.role, "content": m.content} for m in self.messages
+        ]
+
+        while True:
+            resp = self.client.responses.create(
+                model=self.model,
+                input=input_messages,
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "AiResponse",
+                        "schema": AiResponse.model_json_schema(),
+                        "strict": True,
+                    }
+                },
+                tools=tools,
+            )
+
+            tool_calls = [item for item in resp.output if item.type == "function_call"]
+
+            if not tool_calls:
+                break
+
+            # We extend the local input messages, not the class level self.messages because currently we
+            # treat tool calling or multiple tool callings, as an internal conversation to achieve a task.
+            # So we will forget it once this task is done. (Can change later, but doesn't seem useful right now)
+            input_messages.extend(resp.output)
+
+            for tc in tool_calls:
+                print(f"  [tool] {tc.name}({tc.arguments})")
+                result = _dispatch_tool(tc.name, tc.arguments)
+                print(f"  [tool result] {result[:200]}")
+                input_messages.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": tc.call_id,
+                        "output": result,
+                    }
+                )
+
+        ai_response = AiResponse.model_validate_json(resp.output_text)
+        self._add_message_to_history(
+            message=AiMessage(role="assistant", content=ai_response.content)
         )
-
-        ai_response: AiResponse = resp.choices[0].message.parsed
-        self.messages.append({"role": "assistant", "content": ai_response.content})
         return ai_response
-
-    def add_output(self, output: str) -> None:
-        self.messages.append({"role": "assistant", "content": output})
 
     # ------------------------------------------------------------------
     # System prompt refresh
@@ -61,26 +195,41 @@ class ChatSession:
     def _history_text(self) -> str:
         """Return all non-system message content concatenated for fuzzy matching."""
         return " ".join(
-            msg["content"]
+            msg.content
             for msg in self.messages[1:]  # skip system prompt
         ).lower()
 
     def _referenced_tables(self, table_names: list[str]) -> list[str]:
-        """Return tables whose names fuzzy-match text in the conversation history."""
+        """Return tables whose names fuzzy-match text in the conversation history.
+
+        For a table name like ``user_metadata`` (1 underscore → 2 parts) we
+        slide a 2-word window over the history and score each chunk with
+        fuzz.ratio, which avoids the token-set logic smearing scores across
+        individual words.
+        """
         history = self._history_text()
         if not history.strip():
             return []
+
+        history_words = history.split()
         matched = []
-        print(f"\nHistory: {history}")
+
         for t in table_names:
-            alignment = partial_ratio_alignment(t.lower(), history.lower())
-            score = alignment.score
-            if score >= _FUZZY_THRESHOLD:
-                matched_fragment = history[alignment.dest_start : alignment.dest_end]
-                print(
-                    f"  [fuzzy] '{t}' → matched '{matched_fragment}' in history (score={int(score)})"
-                )
+            parts = t.split("_")
+            window_size = len(parts)  # e.g. "user_metadata" → 2
+            t_normalised = t.replace("_", " ")
+
+            best_score = 0
+            for i in range(max(1, len(history_words) - window_size + 1)):
+                chunk = " ".join(history_words[i : i + window_size])
+                score = fuzz_ratio(t_normalised, chunk)
+                if score > best_score:
+                    best_score = score
+
+            if best_score >= _FUZZY_THRESHOLD:
+                print(f"  [fuzzy] '{t}' matched (score={int(best_score)})")
                 matched.append(t)
+
         return matched
 
     def _fetch_schema(self, table_name: str) -> str:
@@ -121,14 +270,14 @@ class ChatSession:
         else:
             schemas_str = ""
 
-        self.messages[0]["content"] = SYSTEM_PROMPT.format(
+        self.messages[0].content = SYSTEM_PROMPT.format(
             tables=tables_str,
             schemas=schemas_str,
         )
 
-    def _trim_history_if_needed(
-        self, messages: list[dict[str, str]], max_length: int
-    ) -> None:
+    def _trim_history_if_needed(self) -> None:
+        messages = self.messages
+        max_length = self.history_length
         """Trim conversation history to max_length turns, always keeping messages[0] (system prompt)."""
         conversation = messages[1:]  # everything except the system prompt
         if len(conversation) > max_length:
@@ -136,16 +285,21 @@ class ChatSession:
                 -max_length:
             ]  # in-place — mutates the real list
 
+    def _add_message_to_history(self, message: AiMessage):
+        self._trim_history_if_needed()
+
+        # Get and append next id
+        next_id = self.messages[-1].id + 1
+        message.id = next_id
+
+        # append
+        self.messages.append(message)
+
 
 def run(session: ChatSession, question: str) -> OutputData:
-    """Refresh DB context, ask the AI, and return a typed OutputData model."""
-    # print("\n--- Chat history ---")
-    # for i, msg in enumerate(session.messages):
-    #     preview = msg["content"]
-    #     print(f"  [{i}] {msg['role'].upper()}: {preview}")
-    # print("--------------------\n")
+    """Ask the AI and return a typed OutputData model."""
     ai_response = session.ask(question)
-
+    print(f"\n Messages: {session.messages}")
     if ai_response.type == "sql":
         return OutputData(type="ai-sql", command=ai_response.content)
     elif ai_response.type == "meta":
