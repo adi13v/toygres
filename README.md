@@ -21,8 +21,7 @@ Toygres eliminates both. All in natural language.
 Spin up a new PostgreSQL database instantly through a simple interactive CLI — no prompts for usernames, passwords, or hostnames. Create it, use it, and drop it just as fast when you are done.
 
 **Example:** Your integration test suite fails halfway through and leaves the database in a dirty state. Instead of writing a teardown script, hit reset from the CLI and start clean in under a second.
-
-https://github.com/user-attachments/assets/c09ea0b4-a8f7-44c2-9cf5-3ad2533dbc00
+https://github.com/user-attachments/assets/1e5c64cd-a86f-48a4-ab46-ba2c03c257b0
 
 ---
 
@@ -40,7 +39,7 @@ Describe what you want to watch in plain English. The agent monitors your databa
 
 **Example:** You are debugging an async background worker. Instead of manually querying the database every few seconds, set up an Observer Agent with a prompt like "Alert me when order 12345 changes status from pending to completed" and get notified the moment it happens.
 
-[Demo](https://youtu.be/eWZNUhpELDs)
+https://github.com/user-attachments/assets/d542035c-5206-4b21-87a3-6e17ea47b830
 
 ---
 
@@ -50,7 +49,8 @@ Ask questions about your data in plain English directly from the CLI. The AI lay
 
 **Example:** You need a quick count of rows matching a complex condition but do not want to context-switch into a SQL editor. Just describe what you want and get the answer inline in your terminal.
 
-[Demo](https://youtube.com/shorts/mAElCeuZ2SI?feature=share)
+
+https://github.com/user-attachments/assets/c09ea0b4-a8f7-44c2-9cf5-3ad2533dbc00
 
 ---
 
