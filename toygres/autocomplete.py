@@ -1,3 +1,4 @@
+from toygres.utils import looks_like_meta
 from prompt_toolkit.completion import Completer, Completion
 from .utils import looks_like_sql
 
@@ -10,7 +11,9 @@ class HistoryCompleter(Completer):
         word = document.text_before_cursor
 
         for entry in self.history.get_strings():
-            if looks_like_sql(entry) and entry.lower().startswith(word.lower()):
+            if (
+                looks_like_sql(entry) or looks_like_meta(entry)
+            ) and entry.lower().startswith(word.lower()):
                 yield Completion(
                     entry,
                     start_position=-len(word),

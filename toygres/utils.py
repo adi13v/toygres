@@ -24,6 +24,13 @@ def looks_like_sql(text: str) -> bool:
     return first_word in SQL_PREFIXES
 
 
+def looks_like_meta(text: str) -> bool:
+    stripped = text.strip().lower()
+    if not stripped:
+        return False
+    return stripped.startswith("\\")
+
+
 def clean_history(file_path: str, days: int = 3) -> None:
     """Remove history entries older than `days` days from the history file."""
     if not os.path.exists(file_path):

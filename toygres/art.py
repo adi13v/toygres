@@ -18,7 +18,7 @@ def print_logo():
     print(LOGO)
 
 
-def print_shortcuts():
+def print_shortcuts(is_baseline=False):
     console = Console()
     table = Table(
         show_header=False,
@@ -33,13 +33,26 @@ def print_shortcuts():
     table.add_row("?? <question>", "Ask AI a question")
     table.add_row("\\<cmd>", "Execute psql meta-commands")
     table.add_row("menu", "Return to database selection")
-    table.add_row(
-        "[yellow]reset db[/yellow]", "[yellow]Delete all rows from all tables[/yellow]"
-    )
-    table.add_row(
-        "[red]atom bomb[/red]",
-        "[red]Drop all tables, indexes, functions — everything[/red]",
-    )
+
+    if is_baseline:
+        table.add_row(
+            "[yellow]reset db[/yellow]",
+            "[yellow]Reset baseline to empty (Warning: affects future recovery)[/yellow]",
+        )
+        table.add_row(
+            "[red]drop db / delete db[/red]",
+            "[red]Drop this baseline DB[/red]",
+        )
+    else:
+        table.add_row(
+            "[yellow]reset db[/yellow]",
+            "[yellow]Delete all rows from all tables[/yellow]",
+        )
+        table.add_row(
+            "[red]atom bomb[/red]",
+            "[red]Drop all tables, indexes, functions — everything[/red]",
+        )
+
     table.add_row("exit / quit", "Quit application")
     table.add_row("Ctrl+C", "Force quit")
 

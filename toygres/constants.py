@@ -4,6 +4,7 @@ BOLD = "\033[1m"
 NAVY = "\033[38;2;3;4;94m"  # #03045E
 YELLOW = "\033[1;33m"
 GRAY = "\033[0;37m"
+MATRIX_GREEN = "\033[38;5;28m"
 DEEP_RED = "\033[38;2;200;0;0m"
 
 # PostgreSQL OID → type name mapping
@@ -33,3 +34,7 @@ PG_TYPES = {
     2950: "uuid",
     3802: "jsonb",
 }
+
+MAX_EXPLORE_COLUMNS_BEFORE_WARNING = 8
+MAX_TOOL_RESULT_LENGTH = 8000
+TRUNCATED_TOOL_RESULT_MESSAGE = "extremely long response, either execute a shorter query or give the sql output to user"

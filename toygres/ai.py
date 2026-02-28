@@ -1,4 +1,10 @@
 from toygres.models import AiMessage
+from toygres.constants import (
+    RESET,
+    MATRIX_GREEN,
+    MAX_TOOL_RESULT_LENGTH,
+    TRUNCATED_TOOL_RESULT_MESSAGE,
+)
 from rapidfuzz.fuzz import ratio as fuzz_ratio
 from openai import OpenAI
 import json
@@ -32,7 +38,7 @@ Provide the most appropriate and correct response to the user’s query using th
 - You may execute:
   - read-only SQL queries
   - meta/schema inspection commands
-- You must not execute any query that modifies data or schema.
+- You must not execute any query that modifies data or schema. Just output the command to user via sql or meta command.
 - If a non–read-only query is required, output it for the user instead.
 
 ---
@@ -44,11 +50,15 @@ Provide the most appropriate and correct response to the user’s query using th
   - an SQL query the user can run.
 - Choose whichever best answers the user's question.
 - Do not include explanations outside the required output.
+- Whenever doing any operation on a noun
 
 ---
 
 ### For statements that are NOT read only
-If you want the user to execute a query, you must output it with type being ```sql``` or ```meta``` and content being the query
+If you want the user to execute a query, you must output it with type being ```sql``` or ```meta``` and content being the query.
+
+### If user asks about user info
+If user asks like which user/role am i in, understand that you have access to 'ai' role only, and give them the sql command for themselves to run.
 """
 # Score threshold for a table name to be considered "referenced" in the conversation
 _FUZZY_THRESHOLD = 70
@@ -158,7 +168,13 @@ class ChatSession:
                     }
                 },
                 tools=tools,
+                max_tool_calls=5,
             )
+            print("\n")
+            print(f"Prompt: {resp.usage.input_tokens}")
+            print(f"Completion: {resp.usage.output_tokens}")
+            print(f"Total: {resp.usage.total_tokens}")
+            print("\n")
 
             tool_calls = [item for item in resp.output if item.type == "function_call"]
 
@@ -170,10 +186,17 @@ class ChatSession:
             # So we will forget it once this task is done. (Can change later, but doesn't seem useful right now)
             input_messages.extend(resp.output)
 
+            print(f"{MATRIX_GREEN}┌{'-' * 78}┐{RESET}")
             for tc in tool_calls:
-                print(f"  [tool] {tc.name}({tc.arguments})")
+                print(
+                    f"{MATRIX_GREEN}│ \033[1m⚙️  [tool] \033[0m{MATRIX_GREEN}{tc.name}({tc.arguments}){RESET}"
+                )
                 result = _dispatch_tool(tc.name, tc.arguments)
-                print(f"  [tool result] {result[:200]}")
+                if len(result) > MAX_TOOL_RESULT_LENGTH:
+                    result = TRUNCATED_TOOL_RESULT_MESSAGE
+                print(
+                    f"{MATRIX_GREEN}│ \033[1m✅ [tool result] \033[0m{MATRIX_GREEN}{result[:200]}{RESET}"
+                )
                 input_messages.append(
                     {
                         "type": "function_call_output",
@@ -181,6 +204,7 @@ class ChatSession:
                         "output": result,
                     }
                 )
+            print(f"{MATRIX_GREEN}└{'-' * 78}┘{RESET}")
 
         ai_response = AiResponse.model_validate_json(resp.output_text)
         self._add_message_to_history(
@@ -299,7 +323,6 @@ class ChatSession:
 def run(session: ChatSession, question: str) -> OutputData:
     """Ask the AI and return a typed OutputData model."""
     ai_response = session.ask(question)
-    print(f"\n Messages: {session.messages}")
     if ai_response.type == "sql":
         return OutputData(type="ai-sql", command=ai_response.content)
     elif ai_response.type == "meta":

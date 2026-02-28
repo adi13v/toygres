@@ -38,6 +38,20 @@ class AiResponse(BaseModel):
     content: str
 
 
+class ObserverAiResponse(BaseModel):
+    """Structured schema returned by the AI model for observer workflows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    creation_command: str
+    attach_command: str
+    function_name: str
+    trigger_name: str
+    table_name: str
+    channel_name: str
+    description: str
+
+
 class AiMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: str
