@@ -68,12 +68,12 @@ class ObserverAgent:
         """Formats the data dictionary strictly based on the event operation."""
         if not isinstance(data, dict):
             return str(data)
-
+            
         if op == "UPDATE" and "old" in data and "new" in data:
             old_data = data["old"] or {}
             new_data = data["new"] or {}
 
-            # Filter to show only keys that changed
+            # Show all fields to identify the row, highlight changes
             out = []
             for k in set(old_data.keys()).union(new_data.keys()):
                 old_val = old_data.get(k)
@@ -82,6 +82,8 @@ class ObserverAgent:
                     out.append(
                         f"• [dim]{k}:[/dim] [red]{old_val}[/red] ➔ [green]{new_val}[/green]"
                     )
+                else:
+                    out.append(f"• [dim]{k}:[/dim] {new_val}")
             return "\n".join(out) if out else "• (No fields changed)"
 
         # INSERT / DELETE fallback
