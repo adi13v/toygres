@@ -84,3 +84,6 @@ uv sync                     # Install Python dependencies
 ```bash
 make start
 ```
+
+## License
+MIT
