@@ -19,6 +19,7 @@ from .execute_sql import parse_sql_output
 from .execute_meta import parse_meta_output
 from .utils import clean_history
 from .observer import run_observer_workflow
+from toygres.costs import session_costs
 
 
 class SmartHistory(FileHistory):
@@ -454,4 +455,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        session_costs.print_costs()

@@ -10,12 +10,9 @@ from openai import OpenAI
 import json
 import os
 import dotenv
-
-
+from toygres.costs import session_costs
 from . import db
 from .models import AiResponse, OutputData
-
-dotenv.load_dotenv()
 
 SYSTEM_PROMPT = """
 ## SYSTEM PROMPT
@@ -137,12 +134,12 @@ class ChatSession:
     def __init__(
         self,
         system_prompt: str = SYSTEM_PROMPT,
-        model: str = "gpt-4.1-mini",
+        model: str | None = None,
         api_key: str | None = None,
         history_length: int = 5,
     ):
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-        self.model = model
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
         self.history_length = history_length
         self.messages = [AiMessage(role="system", content=system_prompt, id=0)]
 
@@ -175,6 +172,8 @@ class ChatSession:
             print(f"Completion: {resp.usage.output_tokens}")
             print(f"Total: {resp.usage.total_tokens}")
             print("\n")
+
+            session_costs.add_tokens(resp.usage.input_tokens, resp.usage.output_tokens)
 
             tool_calls = [item for item in resp.output if item.type == "function_call"]
 

@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.panel import Panel
 import select
 
+from toygres.costs import session_costs
+
 dotenv.load_dotenv()
 
 
@@ -216,7 +218,7 @@ def run_observer_workflow(user_text: str):
 
         with console.status("Generating Observer SQL...", spinner="dots"):
             resp = client.responses.create(
-                model="gpt-4.1-mini",
+                model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
                 input=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": user_text},
@@ -230,6 +232,11 @@ def run_observer_workflow(user_text: str):
                     }
                 },
             )
+
+            if resp.usage:
+                session_costs.add_tokens(
+                    resp.usage.input_tokens, resp.usage.output_tokens
+                )
 
             ai_response = ObserverAiResponse.model_validate_json(resp.output_text)
 
