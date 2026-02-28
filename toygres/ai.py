@@ -167,12 +167,6 @@ class ChatSession:
                 tools=tools,
                 max_tool_calls=5,
             )
-            print("\n")
-            print(f"Prompt: {resp.usage.input_tokens}")
-            print(f"Completion: {resp.usage.output_tokens}")
-            print(f"Total: {resp.usage.total_tokens}")
-            print("\n")
-
             session_costs.add_tokens(resp.usage.input_tokens, resp.usage.output_tokens)
 
             tool_calls = [item for item in resp.output if item.type == "function_call"]
@@ -250,7 +244,6 @@ class ChatSession:
                     best_score = score
 
             if best_score >= _FUZZY_THRESHOLD:
-                print(f"  [fuzzy] '{t}' matched (score={int(best_score)})")
                 matched.append(t)
 
         return matched
@@ -282,7 +275,6 @@ class ChatSession:
 
         # Fuzzy match the table names with the conversation history, to find which table's schema can be included in the prompt.
         referenced = self._referenced_tables(table_names)
-        print(f"Referenced tables: {referenced}")
         if referenced:
             schema_lines = ["\nSchemas of referenced tables:"]
             for t in referenced:
