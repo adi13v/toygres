@@ -22,7 +22,7 @@ Spin up a new PostgreSQL database instantly through a simple interactive CLI —
 
 **Example:** Your integration test suite fails halfway through and leaves the database in a dirty state. Instead of writing a teardown script, hit reset from the CLI and start clean in under a second.
 
-[Demo](https://youtube.com/shorts/yHQkepSEmuk?feature=share)
+https://github.com/user-attachments/assets/c09ea0b4-a8f7-44c2-9cf5-3ad2533dbc00
 
 ---
 
