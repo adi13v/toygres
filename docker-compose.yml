@@ -8,7 +8,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # init.sql will be executed at the first time the container is started
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:

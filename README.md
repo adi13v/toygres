@@ -1,46 +1,62 @@
 # Toygres
 
-Toygres is a lightweight CLI tool for frictionless PostgreSQL database management and intelligent monitoring, tailored for rapid testing.
+A fast, lightweight CLI for PostgreSQL built around disposable databases. Stop writing teardown scripts. Stop waiting on setup. Just get a clean database and get back to work.
+
+---
+
+## The Problem
+
+Testing and debugging against a database is painful. You reset state manually, re-run migrations, re-seed lookup data, and repeat. Toygres eliminates that friction entirely.
+
+---
 
 ## Core Features
 
-### The Disposable Database
-Built for quick testing environments.
-- **One-Keystroke Setup:** Spin up a completely new database instantly.
-- **Instant Teardown:** Delete or reset to a clean slate with a single key press.
+### 1. Instant Disposable Databases
 
-**Example Use Case:**
-You are running integration tests and your test suite fails halfway through, leaving your database in a dirty state. Instead of writing a teardown script, you press `Ctrl+R` to instantly drop and recreate the test database.
+Spin up a new PostgreSQL database instantly through a simple interactive CLI — no prompts for usernames, passwords, or hostnames. Create it, use it, and drop it just as fast when you are done.
 
-### AI-Powered Observer Agent
-A continuous monitor for your data, powered by AI.
-- **Real-time Monitoring:** Track specific row changes without writing polling scripts.
-- **Natural Language Prompts:** Tell the agent what to monitor in plain English; no SQL required.
+**Example:** Your integration test suite fails halfway through and leaves the database in a dirty state. Instead of writing a teardown script, hit reset from the CLI and start clean in under a second.
 
-**Example Use Case:**
-You are testing an asynchronous background worker that processes orders. You deploy an Observer Agent with the prompt: _"Watch the 'orders' table for order ID 12345. Alert me the moment its status changes from 'pending' to 'completed'."_ The agent runs in the background and prints the result as soon as the worker finishes the job.
+---
 
-### Baseline Resets
-Save time by starting from a pre-configured state.
-- **Save State:** Configure essential data (e.g., super-admin, app configs) and save it as a "baseline".
-- **One-Click Recreate:** Delete and recreate your database from the baseline instantly.
+### 2. Baseline Databases
 
-**Example Use Case:**
-Your application requires a default "admin" user and several lookup tables (like countries and currencies) to be populated before it can start. You set this up once, run the "Create Baseline" command, and name it `app_defaults`. Now, whenever you reset your database, you can choose to reset from `app_defaults`, and your admin user and lookup tables are instantly restored.
+Save a pre-configured database state as a named baseline and restore to it any time with a single selection. Think of it as a constructor for your database — you get a fresh instance but with your required seed data already in place.
+
+**Example:** Your app requires an admin user, a set of country codes, and default app config rows before it can run. Configure this once, save it as a baseline, and every future reset restores all of it automatically.
+
+---
+
+### 3. Observer Agent
+
+Describe what you want to watch in plain English. The agent monitors your database in real time and alerts you the moment a matching change occurs — no polling scripts, no SQL triggers required.
+
+**Example:** You are debugging an async background worker. Instead of manually querying the database every few seconds, set up an Observer Agent with a prompt like "Alert me when order 12345 changes status from pending to completed" and get notified the moment it happens.
+
+---
+
+### 4. Natural Language Queries
+
+Ask questions about your data in plain English directly from the CLI. The AI layer has read-only access at the database level, so there is no risk of accidental writes or data manipulation.
+
+**Example:** You need a quick count of rows matching a complex condition but do not want to context-switch into a SQL editor. Just describe what you want and get the answer inline in your terminal.
+
+---
 
 ## Installation
 
-Ensure you have Python 3.11+ installed. Clone the repository and install dependencies using `uv`:
+Requires Python 3.11+ and Docker.
 
 ```bash
 git clone <repository_url>
 cd toygres
-uv sync
+cp .env.example .env        # Configure your environment variables
+docker compose up -d        # Start the required services
+uv sync                     # Install Python dependencies
 ```
 
 ## Usage
-
-Start Toygres using the provided `Makefile` command:
 
 ```bash
 make start

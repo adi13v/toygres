@@ -169,7 +169,17 @@ def main():
                 questionary.Separator("\n"),
                 Choice([("bold", "--- Baseline DBs ---")], disabled=""),
             ]
-            + [Choice(d, value=d) for d in baseline_dbs]
+            + [
+                Choice(
+                    [
+                        ("class:text", d.split("_baseline_for_")[0]),
+                        ("fg:ansigray italic", "_baseline_for_"),
+                        ("class:text", d.split("_baseline_for_")[1]),
+                    ],
+                    value=d,
+                )
+                for d in baseline_dbs
+            ]
             + [
                 Choice(
                     [("fg:yellow bold", "➕ Create new baseline")],
@@ -188,8 +198,7 @@ def main():
         if selected_db == "➕ Create a new database":
             new_db = questionary.text("Enter new database name:").ask()
             if not new_db:
-                print("Database name cannot be empty. Exiting.")
-                return
+                continue
 
             try:
                 db.create_database(new_db)
@@ -442,8 +451,9 @@ def main():
                         if not is_baseline:
                             handle_cascade_operations(query)
                 except KeyboardInterrupt:
-                    print(f"\n{YELLOW}Bye! ʕ·ᴥ·ʔ{RESET}\n")
-                    return
+                    print(f"\n{YELLOW}Returning to DB selection menu...{RESET}\n")
+                    inner_break = True
+                    break
                 except EOFError:
                     print(f"\n{YELLOW}Bye! ʕ·ᴥ·ʔ{RESET}\n")
                     return

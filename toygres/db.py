@@ -32,7 +32,7 @@ def get_databases():
     temp_conn.autocommit = True
     with temp_conn.cursor() as cur:
         cur.execute("SELECT datname FROM pg_database WHERE datistemplate = false;")
-        dbs = [row[0] for row in cur.fetchall()]
+        dbs = [row[0] for row in cur.fetchall() if row[0] != "postgres"]
     temp_conn.close()
     return dbs
 
