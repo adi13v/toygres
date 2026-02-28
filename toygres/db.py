@@ -11,7 +11,7 @@ observer_conn = None
 # Initialize with superuser until the initial db selection
 HOST = "localhost"
 USER = "postgres"
-PORT = "5432"
+PORT = "5433"
 DBNAME = "postgres"
 
 # Initial connection with template1 as a fallback incase postgres is deleted
